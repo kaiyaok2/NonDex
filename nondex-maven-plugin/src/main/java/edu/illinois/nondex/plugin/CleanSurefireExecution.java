@@ -102,6 +102,34 @@ public class CleanSurefireExecution {
                                    + " " + domNode + " "
                                    + MojoExecutor.executionEnvironment(this.mavenProject, this.mavenSession,
                                                                        this.pluginManager));
+            Xpp3Dom domNodeArgLine = domNode.getChild("argLine");
+            if (domNodeArgLine != null) {
+                String argLineValue = domNodeArgLine.getValue();
+                if (argLineValue.contains("@{argLine}")) {
+                    domNodeArgLine.setValue(argLineValue.replace("@{argLine}", ""));
+                }
+                if (argLineValue.indexOf("--patch-module") != argLineValue.lastIndexOf("--patch-module")) {
+                    Pattern patchModulePattern = Pattern.compile("--patch-module\\s+java.base=([^\\s]+)");
+                    Matcher matcher = patchModulePattern.matcher(argLineValue);
+                    Set<String> javaBasePaths = new LinkedHashSet<>();
+                    while (matcher.find()) {
+                        String[] paths = matcher.group(1).split(":");
+                        for (String path : paths) {
+                            javaBasePaths.add(path);
+                        }
+                    }
+                    String cleanedArgLineValue = argLineValue;
+                    if (!javaBasePaths.isEmpty()) {
+                        String maskedArgline = argLineValue.replaceAll(
+                            "--patch-module\\s+java.base=([^\\s]+)", "<<<pm>>>");
+                        String mergedPatchModule = "--patch-module java.base="
+                            + String.join(":", javaBasePaths);
+                        cleanedArgLineValue = maskedArgline.replaceFirst("<<<pm>>>", mergedPatchModule)
+                            .replace("<<<pm>>>", "");
+                    }
+                    domNodeArgLine.setValue(cleanedArgLineValue);
+                }
+            }
             MojoExecutor.executeMojo(this.surefire, MojoExecutor.goal("test"),
                     domNode,
                     MojoExecutor.executionEnvironment(this.mavenProject, this.mavenSession, this.pluginManager));
